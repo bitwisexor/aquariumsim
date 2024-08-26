@@ -12,6 +12,7 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+  "github.com/aquilax/go-perlin"
 )
 
 type Bubble struct {
@@ -30,10 +31,11 @@ type Game struct {
 	weeds   []*Seaweed
 }
 
-var flagCRT = flag.Bool("crt", false, "enable CRT effects")
+var (
+ flagCRT = flag.Bool("crt", false, "enable CRT effects")
+ crtGo []byte
 
-var crtGo []byte
-
+)
 const (
 	screenWidth  = 640
 	screenHeight = 480
