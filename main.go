@@ -33,11 +33,12 @@ type Seaweed struct {
 }
 
 type Game struct {
-	cameraX int
-	cameraY int
-	bubbles []*Bubble
-	weeds   []*Seaweed
-	fishes  []*Fish
+	cameraX  int
+	cameraY  int
+	bubbleCD int
+	bubbles  []*Bubble
+	weeds    []*Seaweed
+	fishes   []*Fish
 }
 
 type GameWithCRTEffect struct {
@@ -53,8 +54,8 @@ var (
 )
 
 const (
-	screenWidth  = 640
-	screenHeight = 480
+	screenWidth  = 340
+	screenHeight = 224
 	maxAngle     = 256
 	fontSize     = 34
 )
@@ -105,7 +106,7 @@ func init() {
 	}
 	seaweedImage = ebiten.NewImageFromImage(img)
 
-	img, _, err = ebitenutil.NewImageFromFile("./bulbous.png")
+	img, _, err = ebitenutil.NewImageFromFile("./altbubble1.png")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -150,8 +151,15 @@ func NewGame(crt bool) ebiten.Game {
 
 func (g *Game) Update() error {
 	g.randomWalk()
-	if rand.Intn(60) == 0 {
-		g.spawnBubble()
+
+	if g.bubbleCD > 0 {
+		g.bubbleCD--
+	}
+
+	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && g.bubbleCD <= 0 {
+		x, y := ebiten.CursorPosition()
+		g.spawnBubbleAt(float64(x), float64(y))
+		g.bubbleCD = 10
 	}
 
 	for _, bubble := range g.bubbles {
@@ -162,7 +170,8 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	op_fish, op_bub, op_sw := &ebiten.DrawImageOptions{}, &ebiten.DrawImageOptions{}, &ebiten.DrawImageOptions{}
-	op_fish.GeoM.Scale(3, 3)
+	op_fish.GeoM.Scale(2, 2)
+	op_sw.GeoM.Scale(-1, -1)
 
 	fish := g.fishes[0]
 
@@ -178,6 +187,15 @@ func (g *Game) Draw(screen *ebiten.Image) {
 
 	screen.DrawImage(bkgImage, nil)
 	screen.DrawImage(fishImage, op_fish)
+
+	// Draw bottom / seabed
+	seabedWidth := seabedImage.Bounds().Dx()
+
+	for x := 0; x < screenWidth; x += seabedWidth {
+		op_sw.GeoM.Reset()
+		op_sw.GeoM.Translate(float64(x), float64(screenHeight-seabedImage.Bounds().Dy()))
+		screen.DrawImage(seabedImage, op_sw)
+	}
 
 	for _, seaweed := range g.weeds {
 		op_sw.GeoM.Reset()
@@ -211,13 +229,13 @@ func (g *Game) randomWalk() {
 	fish := g.fishes[0]
 
 	// Introduce a chance for the fish to lunge
-	if fish.lungeCount <= 0 && rand.Float64() < 0.05 {
-		fish.ax = (rand.Float64() - 0.5) * 4.0 // Lunge with a stronger acceleration
-		fish.ay = (rand.Float64() - 0.5) * 4.0
-		fish.lungeCount = 20 // Set lunge duration
+	if fish.lungeCount <= 0 && rand.Float64() < 0.02 {
+		fish.ax = (rand.Float64() - 0.5) * 0.03 // Lunge with a stronger acceleration
+		fish.ay = (rand.Float64() - 0.5) * 0.02 // Reduced vertical movement during lunge
+		fish.lungeCount = rand.Intn(4)          // Set lunge duration
 	} else {
-		fish.ax = (rand.Float64() - 0.5) * 0.1 // Normal slight acceleration
-		fish.ay = (rand.Float64() - 0.5) * 0.1
+		fish.ax = (rand.Float64() - 0.5) * 0.1  // Normal slight acceleration
+		fish.ay = (rand.Float64() - 0.5) * 0.02 // Reduced vertical movement
 	}
 
 	// Apply acceleration to velocity
@@ -268,11 +286,11 @@ func (g *Game) spawnWeeds() {
 	}
 }
 
-func (g *Game) spawnBubble() {
+func (g *Game) spawnBubbleAt(x, y float64) {
 	bu := &Bubble{
-		x:  rand.Float64() * screenWidth,
-		y:  screenHeight,
-		vy: -0.15,
+		x:  x,
+		y:  y,
+		vy: -0.5,
 	}
 	g.bubbles = append(g.bubbles, bu)
 }
