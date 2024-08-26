@@ -65,6 +65,7 @@ var (
 	arcadeFaceSource *text.GoTextFaceSource
 	bkgImage         *ebiten.Image
 	seaweedImage     *ebiten.Image
+	seabedImage      *ebiten.Image
 )
 
 func init() {
@@ -109,6 +110,12 @@ func init() {
 		log.Fatal(err)
 	}
 	bubblesImage = ebiten.NewImageFromImage(img)
+
+	img, _, err = ebitenutil.NewImageFromFile("seabed.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	seabedImage = ebiten.NewImageFromImage(img)
 
 	img = ebiten.NewImage(screenWidth, screenHeight)
 	bkgImage = img

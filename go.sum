@@ -1,5 +1,3 @@
-github.com/aquilax/go-perlin v1.1.0 h1:Gg+3jQ24wT4Y5GI7TCRLmYarzUG0k+n/JATFqOimb7s=
-github.com/aquilax/go-perlin v1.1.0/go.mod h1:z9Rl7EM4BZY0Ikp2fEN1I5mKSOJ26HQpk0O2TBdN2HE=
 github.com/ebitengine/gomobile v0.0.0-20240825043811-96c531f5bd83 h1:yA0CtFKYZI/db1snCOInRS0Z18QGZU6aBYkqUT0H6RI=
 github.com/ebitengine/gomobile v0.0.0-20240825043811-96c531f5bd83/go.mod h1:n2NbB/F4d9wOXFzC7FT1ipERidmYWC5I4YNOYRs5N7I=
 github.com/ebitengine/hideconsole v1.0.0 h1:5J4U0kXF+pv/DhiXt5/lTz0eO5ogJ1iXb8Yj1yReDqE=

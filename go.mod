@@ -2,10 +2,7 @@ module fish
 
 go 1.22.6
 
-require (
-	github.com/aquilax/go-perlin v1.1.0
-	github.com/hajimehoshi/ebiten/v2 v2.7.8
-)
+require github.com/hajimehoshi/ebiten/v2 v2.7.8
 
 require (
 	github.com/ebitengine/gomobile v0.0.0-20240825043811-96c531f5bd83 // indirect
