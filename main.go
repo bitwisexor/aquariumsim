@@ -12,8 +12,16 @@ import (
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
-  "github.com/aquilax/go-perlin"
 )
+
+type Fish struct {
+	x, y       float64
+	vx, vy     float64
+	ax, ay     float64
+	flipped    bool
+	flipCount  int
+	lungeCount int
+}
 
 type Bubble struct {
 	x, y float64
@@ -27,15 +35,23 @@ type Seaweed struct {
 type Game struct {
 	cameraX int
 	cameraY int
-	bubbles []*Bubble // Slice to hold multiple bubbles
+	bubbles []*Bubble
 	weeds   []*Seaweed
+	fishes  []*Fish
+}
+
+type GameWithCRTEffect struct {
+	ebiten.Game
+
+	crtShader *ebiten.Shader
 }
 
 var (
- flagCRT = flag.Bool("crt", false, "enable CRT effects")
- crtGo []byte
-
+	flagCRT   = flag.Bool("crt", true, "enable CRT effects")
+	crtGo     []byte
+	crtShader *ebiten.Shader
 )
+
 const (
 	screenWidth  = 640
 	screenHeight = 480
@@ -51,15 +67,31 @@ var (
 	seaweedImage     *ebiten.Image
 )
 
-func init() { // Main menu text
+func init() {
+	// Main menu text
 	s, err := text.NewGoTextFaceSource(bytes.NewReader(fonts.PressStart2P_ttf))
 	if err != nil {
 		log.Fatal(err)
 	}
 	arcadeFaceSource = s
+
+	shaderCode := []byte(`
+    package main
+
+    func Fragment(position vec4, texCoord vec2, color vec4) vec4 {
+        if int(mod(position.y, 2.0)) == 0 {
+            color.rgb *= 0.6;
+        }
+        return imageSrc0At(texCoord) * color;
+    }
+`)
+	crtShader, err = ebiten.NewShader(shaderCode)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
-func init() { // load image files into variables
+func init() {
 	img, _, err := ebitenutil.NewImageFromFile("./mirroredfish.png")
 	if err != nil {
 		log.Fatal(err)
@@ -80,21 +112,27 @@ func init() { // load image files into variables
 
 	img = ebiten.NewImage(screenWidth, screenHeight)
 	bkgImage = img
-
 }
 
 func (g *Game) init() {
 	g.cameraX = -240
 	g.cameraY = 0
-	g.bubbles = []*Bubble{} // Initialize bubble slice/
+	g.bubbles = []*Bubble{}
 	g.weeds = []*Seaweed{}
-
+	g.fishes = []*Fish{
+		{
+			x:  float64(screenWidth) / 2,
+			y:  float64(screenHeight) / 2,
+			vx: 0,
+			vy: 0,
+		},
+	}
 	g.spawnWeeds()
 }
 
 func NewGame(crt bool) ebiten.Game {
 	g := &Game{}
-	g.init() // Initialize game state
+	g.init()
 
 	if crt {
 		return &GameWithCRTEffect{Game: g}
@@ -104,46 +142,42 @@ func NewGame(crt bool) ebiten.Game {
 }
 
 func (g *Game) Update() error {
-	// Spawn a new bubble at random intervals
-	if rand.Intn(60) == 0 { // Approximately once per second at 60 FPS
+	g.randomWalk()
+	if rand.Intn(60) == 0 {
 		g.spawnBubble()
 	}
 
-	// Update the position of each bubble
 	for _, bubble := range g.bubbles {
 		bubble.y += bubble.vy
 	}
-
 	return nil
 }
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	op_fish, op_bub, op_sw := &ebiten.DrawImageOptions{}, &ebiten.DrawImageOptions{}, &ebiten.DrawImageOptions{}
 	op_fish.GeoM.Scale(3, 3)
-	op_bub.GeoM.Scale(2, 2) // Adjust the scale as needed
 
-	plBlue := color.RGBA{R: 65, G: 105, B: 225, A: 255} // Current blue
+	fish := g.fishes[0]
 
-	screenWidth, screenHeight := screen.Size() //used for calculating position
-	spriteWidth, spriteHeight := fishImage.Size()
+	if fish.flipped {
+		op_fish.GeoM.Scale(-1, 1)                                   // Flip the image horizontally
+		op_fish.GeoM.Translate(float64(fishImage.Bounds().Dx()), 0) // Adjust position after flip
+	}
 
-	x := (screenWidth - spriteWidth*3) / 2
-	y := (screenHeight - spriteHeight*3) / 2
+	op_fish.GeoM.Translate(fish.x, fish.y)
 
-	op_fish.GeoM.Translate(float64(x), float64(y))
+	plBlue := color.RGBA{R: 65, G: 105, B: 225, A: 255}
+	bkgImage.Fill(plBlue)
 
-	bkgImage.Fill(plBlue) // Fill background
-
-	screen.DrawImage(bkgImage, nil)      // Draw the background
-	screen.DrawImage(fishImage, op_fish) // Draw the fish
+	screen.DrawImage(bkgImage, nil)
+	screen.DrawImage(fishImage, op_fish)
 
 	for _, seaweed := range g.weeds {
 		op_sw.GeoM.Reset()
 		op_sw.GeoM.Translate(seaweed.x, seaweed.y)
-		screen.DrawImage(seaweedImage, op_sw) // Draw the seaweed using its options
+		screen.DrawImage(seaweedImage, op_sw)
 	}
 
-	// Draw bubbles
 	for _, bubble := range g.bubbles {
 		op_bub.GeoM.Reset()
 		op_bub.GeoM.Translate(bubble.x, bubble.y)
@@ -155,10 +189,65 @@ func (g *Game) Layout(screenWidth, screenHeight int) (int, int) {
 	return screenWidth, screenHeight
 }
 
-type GameWithCRTEffect struct {
-	ebiten.Game
+func (g *GameWithCRTEffect) Draw(screen *ebiten.Image) {
+	img := ebiten.NewImage(screenWidth, screenHeight)
+	g.Game.Draw(img)
 
-	crtShader *ebiten.Shader
+	options := ebiten.DrawRectShaderOptions{
+		Images: [4]*ebiten.Image{img},
+	}
+
+	screen.DrawRectShader(screenWidth, screenHeight, crtShader, &options)
+}
+
+func (g *Game) randomWalk() {
+	fish := g.fishes[0]
+
+	// Introduce a chance for the fish to lunge
+	if fish.lungeCount <= 0 && rand.Float64() < 0.05 {
+		fish.ax = (rand.Float64() - 0.5) * 4.0 // Lunge with a stronger acceleration
+		fish.ay = (rand.Float64() - 0.5) * 4.0
+		fish.lungeCount = 20 // Set lunge duration
+	} else {
+		fish.ax = (rand.Float64() - 0.5) * 0.1 // Normal slight acceleration
+		fish.ay = (rand.Float64() - 0.5) * 0.1
+	}
+
+	// Apply acceleration to velocity
+	fish.vx += fish.ax
+	fish.vy += fish.ay
+
+	// Update position with the new velocity
+	fish.x += fish.vx
+	fish.y += fish.vy
+
+	// Decrease the lunge count if active
+	if fish.lungeCount > 0 {
+		fish.lungeCount--
+	}
+
+	// Flip the fish only if the movement is significantly different and sustained
+	if fish.vx > 0.2 && fish.flipped {
+		fish.flipped = false
+	} else if fish.vx < -0.2 && !fish.flipped {
+		fish.flipped = true
+	}
+
+	// Boundary check to keep the fish within the screen
+	if fish.x < 0 {
+		fish.x = 0
+		fish.vx = -fish.vx
+	} else if fish.x > screenWidth {
+		fish.x = screenWidth
+		fish.vx = -fish.vx
+	}
+	if fish.y < 0 {
+		fish.y = 0
+		fish.vy = -fish.vy
+	} else if fish.y > screenHeight {
+		fish.y = screenHeight
+		fish.vy = -fish.vy
+	}
 }
 
 func (g *Game) spawnWeeds() {
@@ -166,7 +255,7 @@ func (g *Game) spawnWeeds() {
 	for i := 0; i < num_spawn; i++ {
 		sw := &Seaweed{
 			x: rand.Float64() * screenWidth,
-			y: float64(screenHeight - seaweedImage.Bounds().Dy()), // Position at the bottom
+			y: float64(screenHeight - seaweedImage.Bounds().Dy()),
 		}
 		g.weeds = append(g.weeds, sw)
 	}
@@ -176,7 +265,7 @@ func (g *Game) spawnBubble() {
 	bu := &Bubble{
 		x:  rand.Float64() * screenWidth,
 		y:  screenHeight,
-		vy: -0.15, // Negative vy makes the bubble move upwards
+		vy: -0.15,
 	}
 	g.bubbles = append(g.bubbles, bu)
 }
