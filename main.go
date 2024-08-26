@@ -19,6 +19,7 @@ type Fish struct {
 	vx, vy     float64
 	ax, ay     float64
 	flipped    bool
+	bored      bool
 	flipCount  int
 	lungeCount int
 }
@@ -233,12 +234,12 @@ func (g *Game) randomWalk() {
 
 	// Introduce a chance for the fish to lunge
 	if fish.lungeCount <= 0 && rand.Float64() < 0.02 {
-		fish.ax = (rand.Float64() - 0.7) * 0.03 // Lunge with a stronger acceleration
-		fish.ay = (rand.Float64() - 0.9) * 0.02 // Reduced vertical movement during lunge
-		fish.lungeCount = rand.Intn(4) + 1      // Set lunge duration
+		fish.ax = (rand.Float64() - 0.7) * 0.008 // Lunge with a stronger acceleration
+		fish.ay = (rand.Float64() - 0.9) * 0.005 // Reduced vertical movement during lunge
+		fish.lungeCount = rand.Intn(4) + 1       // Set lunge duration
 	} else {
-		fish.ax = (rand.Float64() - 0.5) * 0.01 // Normal slight acceleration
-		fish.ay = (rand.Float64() - 0.5) * 0.02 // Reduced vertical movement
+		fish.ax = (rand.Float64() - 0.5) * 0.01  // Normal slight acceleration
+		fish.ay = (rand.Float64() - 0.5) * 0.009 // Reduced vertical movement
 	}
 
 	// Apply acceleration to velocity
@@ -265,8 +266,8 @@ func (g *Game) randomWalk() {
 	if fish.x < 0 {
 		fish.x = 0
 		fish.vx = -fish.vx
-	} else if fish.x > screenWidth {
-		fish.x = screenWidth
+	} else if fish.x > screenWidth-30 {
+		fish.x = screenWidth - 30
 		fish.vx = -fish.vx
 	}
 	if fish.y < 0 {
@@ -279,7 +280,7 @@ func (g *Game) randomWalk() {
 }
 
 func (g *Game) spawnWeeds() {
-	num_spawn := rand.Intn(21) + 20
+	num_spawn := rand.Intn(11) + 20
 	for i := 0; i < num_spawn; i++ {
 		sw := &Seaweed{
 			x: rand.Float64() * screenWidth,
