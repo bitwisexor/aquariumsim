@@ -6,8 +6,8 @@ import (
 	"image/color"
 	_ "image/png"
 	"log"
-	"math/rand"
-
+	"math"
+  "math/rand"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
@@ -70,6 +70,15 @@ var (
 	seaweedImage     *ebiten.Image
 	seabedImage      *ebiten.Image
 )
+func (f *Fish) hitbox() (left, right, top, bottom float64) {
+  width := float64(fishImage.Bounds().Dx()) * 2
+  height := float64(fishImage.Bounds().Dy()) * 2
+  left = f.x
+  right = f.x + width
+  top = f.y
+  bottom = f.y + height
+  return
+}
 
 func init() {
 	// Main menu text
@@ -161,12 +170,15 @@ func (g *Game) Update() error {
 	if ebiten.IsMouseButtonPressed(ebiten.MouseButtonLeft) && g.bubbleCD <= 0 {
 		x, y := ebiten.CursorPosition()
 		g.spawnBubbleAt(float64(x), float64(y))
-		g.bubbleCD = 20 // Frames to wait before spawning
+		g.bubbleCD = 40 // Frames to wait before spawning
 	}
 
 	for _, bubble := range g.bubbles {
 		bubble.y += bubble.vy
 	}
+
+  g.giveChase() // Fish chases bubbles
+
 	return nil
 }
 
@@ -279,6 +291,47 @@ func (g *Game) randomWalk() {
 	}
 }
 
+func (g *Game) checkCollisions() {
+}
+
+func (g *Game) giveChase() { // Fish gives chase of bubble objects
+  if len(g.bubbles) == 0 {
+    return // If no bubbles 
+  }
+
+  fish := g.fishes[0]
+  closestBub := g.bubbles[0]
+  minDistance := distance(fish.x, fish.y, closestBub.x, closestBub.y)
+
+  // Find closest bubble
+  for _, bubble := range g.bubbles {
+    dist := distance(fish.x, fish.y, bubble.x, bubble.y)
+    if dist < minDistance{
+      minDistance = dist
+      closestBub = bubble
+    }
+  }
+
+  if closestBub.y < 0 || closestBub.y > screenHeight || closestBub.x < 0 || closestBub.x > screenWidth {
+    fish.ax = 0
+    fish.ay = 0
+    return
+  }
+
+  fish.ax = (closestBub.x - fish.x) * 0.0001
+  fish.ay = (closestBub.y - fish.y) * 0.0001
+
+  fish.vx += fish.ax
+  fish.vy += fish.ay
+
+  fish.x += fish.vx
+  fish.y += fish.vy
+}
+
+func distance(x1, y1, x2, y2 float64) float64 {
+  return math.Sqrt(math.Pow(x2-x1, 2) + math.Pow(y2-y1, 2))
+}
+
 func (g *Game) spawnWeeds() {
 	num_spawn := rand.Intn(11) + 20
 	for i := 0; i < num_spawn; i++ {
@@ -296,7 +349,7 @@ func (g *Game) spawnBubbleAt(x, y float64) {
 	bu := &Bubble{
 		x:     x,
 		y:     y,
-		vy:    -0.5,
+		vy:    -0.3,
 		scale: scale,
 	}
 	g.bubbles = append(g.bubbles, bu)
