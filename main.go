@@ -5,11 +5,15 @@ import (
 	"flag"
 	"image/color"
 	_ "image/png"
+	"io/ioutil"
 	"log"
 	"math"
 	"math/rand"
+	"os"
 
 	"github.com/hajimehoshi/ebiten/v2"
+	"github.com/hajimehoshi/ebiten/v2/audio"
+	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
@@ -35,6 +39,13 @@ type Seaweed struct {
 	x, y float64
 }
 
+type PopEffect struct {
+	x, y   float64
+	scale  float64
+	frames int
+	active bool
+}
+
 type Game struct {
 	cameraX  int
 	cameraY  int
@@ -51,9 +62,11 @@ type GameWithCRTEffect struct {
 }
 
 var (
-	flagCRT   = flag.Bool("crt", true, "enable CRT effects")
-	crtGo     []byte
-	crtShader *ebiten.Shader
+	flagCRT      = flag.Bool("crt", true, "enable CRT effects")
+	crtGo        []byte
+	crtShader    *ebiten.Shader
+	audioContext *audio.Context
+	popSound     *audio.Player
 )
 
 const (
@@ -61,6 +74,9 @@ const (
 	screenHeight = 224
 	maxAngle     = 256
 	fontSize     = 34
+	maxVelocity  = 2.0
+
+	sampleRate = 48000
 )
 
 var (
@@ -103,7 +119,11 @@ func init() {
 	crtShader, err = ebiten.NewShader(shaderCode)
 	if err != nil {
 		log.Fatal(err)
+
 	}
+
+	audioContext = audio.NewContext(48000)
+	loadSound("./res/popsound.mp3")
 }
 
 func init() {
@@ -164,6 +184,7 @@ func NewGame(crt bool) ebiten.Game {
 
 func (g *Game) Update() error {
 	g.randomWalk()
+	g.checkCollisions()
 
 	if g.bubbleCD > 0 {
 		g.bubbleCD--
@@ -252,8 +273,19 @@ func (g *Game) randomWalk() {
 		fish.ay = (rand.Float64() - 0.9) * 0.005 // Reduced vertical movement during lunge
 		fish.lungeCount = rand.Intn(4) + 1       // Set lunge duration
 	} else {
-		fish.ax = (rand.Float64() - 0.5) * 0.01  // Normal slight acceleration
-		fish.ay = (rand.Float64() - 0.5) * 0.009 // Reduced vertical movement
+		fish.ax = (rand.Float64() - 0.5) * 0.006 // Normal slight acceleration
+		fish.ay = (rand.Float64() - 0.5) * 0.003 // Reduced vertical movement
+	}
+
+	if fish.vx > maxVelocity {
+		fish.vx = maxVelocity
+	} else if fish.vx < -maxVelocity {
+		fish.vx = -maxVelocity
+	}
+	if fish.vy > maxVelocity {
+		fish.vy = maxVelocity
+	} else if fish.vy < -maxVelocity {
+		fish.vy = -maxVelocity
 	}
 
 	// Apply acceleration to velocity
@@ -279,21 +311,37 @@ func (g *Game) randomWalk() {
 	// Boundary check to keep the fish within the screen
 	if fish.x < 0 {
 		fish.x = 0
-		fish.vx = -fish.vx
+		fish.vx = -fish.vx * 0.7 // Reduce velocity on bounce
 	} else if fish.x > screenWidth-30 {
 		fish.x = screenWidth - 30
-		fish.vx = -fish.vx
+		fish.vx = -fish.vx * 0.7 // Reduce velocity on bounce
 	}
 	if fish.y < 0 {
 		fish.y = 0
-		fish.vy = -fish.vy
+		fish.vy = -fish.vy * 0.7 // Reduce velocity on bounce
 	} else if fish.y > screenHeight-seabedHeight {
 		fish.y = screenHeight - seabedHeight
-		fish.vy = -fish.vy
+		fish.vy = -fish.vy * 0.7 // Reduce velocity on bounce
 	}
+
 }
 
 func (g *Game) checkCollisions() {
+	fish := g.fishes[0]
+	left, right, top, bottom := fish.hitbox()
+
+	var remainingBubbles []*Bubble
+
+	for _, bubble := range g.bubbles {
+		if bubble.x > left && bubble.x < right && bubble.y > top && bubble.y < bottom {
+			popSound.Rewind()
+			popSound.Play()
+			continue
+		}
+		remainingBubbles = append(remainingBubbles, bubble)
+	}
+
+	g.bubbles = remainingBubbles
 }
 
 func (g *Game) giveChase() { // Fish gives chase of bubble objects
@@ -349,7 +397,6 @@ func (g *Game) spawnWeeds() {
 
 func (g *Game) spawnBubbleAt(x, y float64) {
 	scale := rand.Float64()*0.5 + 0.5
-
 	bu := &Bubble{
 		x:     x,
 		y:     y,
@@ -357,6 +404,29 @@ func (g *Game) spawnBubbleAt(x, y float64) {
 		scale: scale,
 	}
 	g.bubbles = append(g.bubbles, bu)
+}
+
+func loadSound(filename string) {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer f.Close()
+
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	decodedMp3, err := mp3.Decode(audioContext, bytes.NewReader(data))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	popSound, err = audio.NewPlayer(audioContext, decodedMp3)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func main() {
