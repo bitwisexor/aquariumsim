@@ -43,6 +43,7 @@ type PopEffect struct {
 	x, y   float64
 	scale  float64
 	frames int
+	alpha  float64
 	active bool
 }
 
@@ -53,6 +54,7 @@ type Game struct {
 	bubbles  []*Bubble
 	weeds    []*Seaweed
 	fishes   []*Fish
+	pops     []*PopEffect
 }
 
 type GameWithCRTEffect struct {
@@ -86,15 +88,17 @@ var (
 	bkgImage         *ebiten.Image
 	seaweedImage     *ebiten.Image
 	seabedImage      *ebiten.Image
+	poppedImage      *ebiten.Image
 )
 
 func (f *Fish) hitbox() (left, right, top, bottom float64) {
-	width := float64(fishImage.Bounds().Dx()) * 2
-	height := float64(fishImage.Bounds().Dy()) * 2
-	left = f.x
-	right = f.x + width
-	top = f.y
-	bottom = f.y + height
+	padding := 20.0
+	width := float64(fishImage.Bounds().Dx())*2 + padding
+	height := float64(fishImage.Bounds().Dy())*2 + padding
+	left = f.x - padding/2
+	right = f.x + width - padding/2
+	top = f.y - padding/2
+	bottom = f.y + height - padding/2
 	return
 }
 
@@ -151,6 +155,12 @@ func init() {
 	}
 	seabedImage = ebiten.NewImageFromImage(img)
 
+	img, _, err = ebitenutil.NewImageFromFile("./res/popped1.png")
+	if err != nil {
+		log.Fatal(err)
+	}
+	poppedImage = ebiten.NewImageFromImage(img)
+
 	img = ebiten.NewImage(screenWidth, screenHeight)
 	bkgImage = img
 }
@@ -185,6 +195,25 @@ func NewGame(crt bool) ebiten.Game {
 func (g *Game) Update() error {
 	g.randomWalk()
 	g.checkCollisions()
+
+	for _, pop := range g.pops {
+		if pop.active {
+			pop.frames--
+			pop.alpha -= 0.06
+			if pop.frames <= 0 || pop.alpha <= 0 {
+				pop.active = false
+			}
+		}
+	}
+
+	var activePops []*PopEffect
+
+	for _, pop := range g.pops {
+		if pop.active {
+			activePops = append(activePops, pop)
+		}
+	}
+	g.pops = activePops
 
 	if g.bubbleCD > 0 {
 		g.bubbleCD--
@@ -245,6 +274,16 @@ func (g *Game) Draw(screen *ebiten.Image) {
 		op_bub.GeoM.Scale(bubble.scale, bubble.scale)
 		op_bub.GeoM.Translate(bubble.x, bubble.y)
 		screen.DrawImage(bubblesImage, op_bub)
+	}
+
+	for _, pop := range g.pops {
+		if pop.active {
+			op_pop := &ebiten.DrawImageOptions{}
+			op_pop.GeoM.Scale(pop.scale, pop.scale)
+			op_pop.GeoM.Translate(pop.x-float64(poppedImage.Bounds().Dx())*pop.scale/2, pop.y-float64(poppedImage.Bounds().Dy())*pop.scale/2)
+			op_pop.ColorM.Scale(1, 1, 1, pop.alpha)
+			screen.DrawImage(poppedImage, op_pop)
+		}
 	}
 }
 
@@ -336,6 +375,16 @@ func (g *Game) checkCollisions() {
 		if bubble.x > left && bubble.x < right && bubble.y > top && bubble.y < bottom {
 			popSound.Rewind()
 			popSound.Play()
+
+			g.pops = append(g.pops, &PopEffect{
+				x:      bubble.x,
+				y:      bubble.y,
+				scale:  1.0,
+				frames: 14,
+				alpha:  1.0,
+				active: true,
+			})
+
 			continue
 		}
 		remainingBubbles = append(remainingBubbles, bubble)
@@ -370,8 +419,12 @@ func (g *Game) giveChase() { // Fish gives chase of bubble objects
 		return
 	}
 
-	fish.ax = (closestBub.x - fish.x) * 0.0001
-	fish.ay = (closestBub.y - fish.y) * 0.0001
+	predictionFactor := 8.0
+	predictedX := closestBub.x + closestBub.vy*predictionFactor
+	predictedY := closestBub.y + closestBub.vy*predictionFactor
+
+	fish.ax = (predictedX - fish.x) * 0.0001
+	fish.ay = (predictedY - fish.y) * 0.0001
 
 	fish.vx += fish.ax
 	fish.vy += fish.ay
@@ -400,7 +453,7 @@ func (g *Game) spawnBubbleAt(x, y float64) {
 	bu := &Bubble{
 		x:     x,
 		y:     y,
-		vy:    -0.3,
+		vy:    -0.2,
 		scale: scale,
 	}
 	g.bubbles = append(g.bubbles, bu)
