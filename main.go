@@ -10,12 +10,14 @@ import (
 	"math"
 	"math/rand"
 	"os"
+
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/audio"
 	"github.com/hajimehoshi/ebiten/v2/audio/mp3"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/examples/resources/fonts"
 	"github.com/hajimehoshi/ebiten/v2/text/v2"
+	"golang.org/x/text/language"
 )
 
 type Fish struct {
@@ -284,6 +286,17 @@ func (g *Game) Draw(screen *ebiten.Image) {
 			screen.DrawImage(poppedImage, op_pop)
 		}
 	}
+
+	textString := "Fish"
+	f := &text.GoTextFace{
+		Source:    arcadeFaceSource,
+		Direction: text.DirectionLeftToRight,
+		Size:      34,
+		Language:  language.English,
+	}
+
+	op_text := &text.DrawOptions{}
+	text.Draw(screen, textString, f, op_text)
 }
 
 func (g *Game) Layout(screenWidth, screenHeight int) (int, int) {
